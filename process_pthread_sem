@@ -1,0 +1,168 @@
+{
+	线程：    轻量级进程  task_struct来描述一个线程
+	// 线程是资源调度的最小单位    进程是资源分配的最小单位
+	//一个进程中  可以有 多个线程-----> 共享同一块内存
+	线程的操作{   // 线程属于 三方库函数   编译的时候  -lpthread
+	//以下函数  成功 0  出错  错误号
+		#include<pthread.h>
+		创建线程：
+			pthread_create(pthread_t *tid,NULL,void *(*p)(void *),void *arg);
+				tid：  要创建的线程
+				p：    线程要执行的函数 的地址
+				arg:   传递的 线程执行的函数的  参数
+		线程退出：
+			pthread_exit(void *status);
+				status：  就是返回值   (返回值类型为void *)
+		
+		线程等待：
+			pthread_join(tid,void * *status)；
+				tid：  要等待的线程
+				status:  用来接收线程结束的返回值
+		控制线程：
+			pthread_cancel(tid)；
+				tid:  要强制结束的线程
+	}
+	//线程共享一块内存区域   线程之间  有共享区域  和 私有区域
+	线程间通信{  //通过共享区  临界区
+		//线程通信  通过全局变量完成   而全局变量 每个线程都可以访问  这样临界资源就存在一定的危险 可能多个线程同时去访问全局变量
+		同步{  //任务按照一定的顺序访问
+			//无名信号量
+			信号量：   信号量 ---->  代表 某一种资源  其值 代表资源数量
+			#include<semaphore>
+			信号量初始化
+				sem_init(sem_t *sem,0,value);
+					sem：   要初始化的信号量
+					0：  线程间使用
+			P操作 申请资源
+				sem_wait(sem_t *sem);
+			V操作  释放资源
+				sem_post(sem_t *sem);
+		}
+		// 信号量也可以完成  互斥的功能
+		互斥{ //谁抢到就是谁的   但是每次只能有一个线程操作
+			#include<pthread.h>
+			//用 互斥锁  来 完成互斥操作
+			互斥锁的初始化：
+				pthread_mutex_init(pthread_mutex_t *lock,NULL);
+			申请互斥锁
+				pthread_mutex_lock(pthread_mutex_t *lock);
+			释放锁
+				pthread_mutex_unlock(pthread_mutex_t *lock);
+			// 互斥锁  要注意 不要产生死锁的情况
+		}
+	}
+}
+
+进程间通信{
+	早期的通信方式
+		无名管道   有名管道   信号
+	system V IPC
+		共享内存   消息队列   信号灯集
+	BSD
+		套接字  ----> 网络编程
+}
+早期的通信方式{   pipe
+	无名管道{  // 无名管道并不是普通的文件，不属于任何文件系统，并且只存在于内存中
+		特点：
+			1、只能用于具有亲缘关系的进程之间的通信
+			2、半双工的通信模式，具有固定的读端和写端
+			3、管道可以看成是一种特殊的文件，对于它的读写可以使用文件IO如read、write函数。
+		管道是基于文件描述符的通信方式。  //通过操作文件描述符 去 操作管道
+		当一个管道建立时，它会创建两个文件描述符fd[0]和fd[1]。
+		其中fd[0]固定用于读管道，而fd[1]固定用于写管道。
+		
+		创建无名管道{ 
+			int pipe(int fd[2]);
+				fd[2]:  2个元素的数组   fd[0]---> 读管道   fd[1]--->写管道
+				返回值   成功 0  失败 -1
+				// 一个进程 用  fd[1] 写入管道   另一个进程 就 用 fd[0] 从管道中读出
+		}
+		
+		注意：
+			写管道的时候{  //管道时有大小 len
+				读管道存在：
+					如果 管道中原来有内容size，  只能写入 len-size  ,
+					管道一旦 满了 ，写操作就会阻塞     等管道中数据被 读了，又才写入管道
+				读管道不存在：
+					往管道中写入数据  内核会发送一个 SIGPIPE--->管道破裂信号  ---->一旦接受到这个信号程序就会终止
+			}
+			// 要 往管道中写入内容的时候   一定要有读端存在！！
+			读管道的时候{
+				写管道存在
+					管道中原来有内容 ，读出 管道中的内容   
+					管道中没有内容   会一直阻塞
+				
+				写管道不存在：
+					管道中原来有内容 ，读出 管道中的内容 
+					管道中如果没有内容， read 会直接返回 0   就代表 读到末尾了
+			}
+	}
+	有名管道{  // 在文件系统中存在    fifo 
+		创建有名管道{
+			1、命令
+				mkfifo 管道名
+			2、函数
+				#include <unistd.h>
+				#include <fcntl.h>
+				#include <sys/types.h>
+				int mkfifo(const char *filename,mode_t mode);   // 等同于 creat函数
+					filename: 要创建的管道文件 的路径
+					mode:  权限   0666   
+					返回值：   成功 0  失败 -1
+		}
+		操作有名管道{
+			1、有名管道是个文件   -----> 要使用的话   要先打开文件
+			2、 使用IO操作----->  read write
+			3、用完 就 close
+			//  注意  管道 不支持 lseek定位
+		}
+
+	}
+	信号{
+		信号是在软件层次上对中断机制的一种模拟，是一种异步通信方式
+		//信号可以直接进行用户空间进程和内核进程之间的交互，
+		用户进程对信号的操作{
+			忽略信号
+			执行缺省操作
+			捕捉信号 ---->  可以自定义信号处理函数
+		}
+		kill命令  //发送信号的命令
+		kill -l
+		信号发送{  //进程执行的是  缺省操作
+			#include <signal.h>
+			#include <sys/types.h>
+
+			int kill(pid_t pid, int sig);
+				pid:  	pid > 0 目标进程的进程ID
+						pid == 0  进程组
+				sig：   发送过去的信号
+				返回值：  成功 0  失败 -1
+			int raise(int sig);
+				sig:  信号
+				//发送给当前进程
+			补充：
+			unsigned int alarm(unsigned int sec)；
+			{
+				//闹钟函数 定时函数
+				sec :  定时的秒数
+				//  sec秒之后  内核 会给当前进程发送  SIGALRM 信号
+				//Alarm clock
+			}
+			int pause(void);
+			{
+				//执行这个函数  程序就会阻塞 直到接收到信号为止
+			}
+		}
+		信号处理{  //可以接收到指定信号   ---->  处理 自定义的信号处理函数
+			//  SIGKILL  SIGSTOP 两个信号不能被 忽略 阻塞  自定义处理
+			void (*   signal(int signum, void (*handler)(int))    )(int);
+				//信号处理函数  原型：    void  func(int signum)
+				signum：   要处理的信号
+				handler:  	指针  指向 自定义的信号处理函数 
+							SIG_IGN：忽略该信号。
+							SIG_DFL：采用系统默认方式处理信号。
+
+				返回：   返回 signum  默认处理函数的地址
+		}
+	}
+}

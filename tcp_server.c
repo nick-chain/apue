@@ -3,7 +3,8 @@
 #include<sys/socket.h>
 #include<arpa/inet.h>
 #include<unistd.h>
-
+//关于TCP的三次握手
+//链接断开需要四次挥手
 int main(void){
     
     //1.创建套接字
